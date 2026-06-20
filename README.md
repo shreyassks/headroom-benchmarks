@@ -16,8 +16,9 @@ End-to-end benchmark of [headroom-ai](https://github.com/chopratejas/headroom) a
 | `src/headroom_benchmarks/langgraph/` | **The headline benchmark.** LangGraph ReAct agent + custom MCP server + SQLite fixture + 50-case runner. Snapshot-based metrics aggregation. See its README for measured numbers, architecture diagram (Mermaid), and reproduction steps. |
 | `src/headroom_benchmarks/benchmarks/tier1/` | Reproduction of upstream academic benchmarks — GSM8K (math), SQuAD v2 (QA), BFCL (function-calling) — against MiniMax-M3, with and without Headroom compression. |
 | `src/headroom_benchmarks/benchmarks/synthetic/` | Synthetic-payload benchmarks reproducing Headroom's 92% compression claim (code search, SRE incident). |
+| **[GitHub Wiki](https://github.com/shreyassks/headroom-benchmarks/wiki)** | 8 deep-dive pages: Architecture (Mermaid), Results, Cost Simulation (Sonnet/Opus/GPT-5.4), Reproduction, Methodology, How-the-proxy-compresses, Troubleshooting. |
 
-The `langgraph/` subdirectory is the primary artifact; everything else is supporting context.
+The `langgraph/` subdirectory is the primary artifact; everything else is supporting context. For extended explanation of any section, the wiki is the authoritative reference.
 
 ---
 
@@ -257,3 +258,8 @@ If you'd rather edit the global `~/.claude/settings.json` instead, set its `env.
 ## License
 
 Source code in this repo: same license as upstream [headroom-ai](https://github.com/chopratejas/headroom) (Apache-2.0). The benchmark artifacts (`results/`, `logs/`) are CC-BY-4.0 — share, adapt, attribute.
+
+## Further reading
+
+- **[GitHub Wiki](https://github.com/shreyassks/headroom-benchmarks/wiki)** — 8 deep-dive pages on architecture, results, methodology, cost simulation, troubleshooting
+- **Architecture diagram** — see [`src/headroom_benchmarks/langgraph/README.md`](src/headroom_benchmarks/langgraph/README.md) (Mermaid) or [the wiki page](https://github.com/shreyassks/headroom-benchmarks/wiki/Architecture)

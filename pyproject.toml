@@ -1,0 +1,14 @@
+[project]
+name = "headroom"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "faker>=40.23.0",
+    "headroom-ai[all]>=0.26.0",
+    "langchain-core>=0.3",
+    "langchain-mcp-adapters>=0.3.0",
+    "langgraph>=1.2.6",
+    "mcp>=1.0",
+]

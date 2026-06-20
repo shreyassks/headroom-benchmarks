@@ -1,0 +1,22 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+.env
+.serena
+.claude
+
+# Project-local Claude instructions — keep out of public repo
+CLAUDE.md
+
+# LangGraph benchmark artifacts
+scratch/langgraph_bench/db/*.db
+scratch/langgraph_bench/results/
+scratch/tier1/logs/
+headroom_memory.db

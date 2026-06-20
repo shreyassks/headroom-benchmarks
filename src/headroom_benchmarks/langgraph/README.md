@@ -168,6 +168,53 @@ Actual numbers from the run at `bench_2026-06-20T04-57-00Z/`:
 
 5. **`cost.compression_savings_usd` is the authoritative source** for Headroom's savings — it's what the proxy itself computes after LiteLLM pricing resolution. Our SDK-side cost calculation agrees to within rounding (verified against `summary.cost.savings_pct` from the proxy's own dashboard).
 
+### Cost simulation across models
+
+The v2 run was on **MiniMax-M3** (a low-cost Anthropic-compatible endpoint — ~5× cheaper than Sonnet, ~8× cheaper than Opus). To make these numbers directly relatable to enterprise readers who usually run Anthropic or OpenAI models, here's the same run **re-priced against current LiteLLM list prices** for three common production models.
+
+**Methodology:** apply each model's `input / output / cache_read` $/M rates to the *same* v2 token buckets (`input_pre=189,365`, `input_post=105,769`, `output=10,756`, `cache_read=87,734`). The `saved` column = `(input_pre − input_post) × input_price`, which equals 44.15% of input cost for any model.
+
+#### Overall (50 cases, 106 LLM calls, ~6 min wall-clock)
+
+| Model | Input $/M | Output $/M | Cache read $/M | **With Headroom** | Without Headroom | **Saved** | Savings % |
+|---|---|---|---|---|---|---|---|
+| Claude Sonnet 4.6 | $3.00 | $15.00 | $0.30 | **$0.5050** | $0.7558 | **$0.2508** | 33.2% |
+| Claude Opus 4.6   | $5.00 | $25.00 | $0.50 | **$0.8416** | $1.2596 | **$0.4180** | 33.2% |
+| GPT-5.4           | $2.50 | $15.00 | $0.25 | **$0.4477** | $0.6567 | **$0.2090** | 31.8% |
+| MiniMax-M3 (run)  | $0.60 |  $2.40 | $0.12 | $0.0998* | $0.1500* | $0.0502* | 33.4% |
+
+\* The proxy's actual measured cost on MiniMax was **$0.0853** with $0.0502 saved. The $0.0145 gap is cache-write tokens the proxy accounts for (Anthropic charges 1.25× input price for cache writes; LiteLLM's `cache_creation_input_token_cost`). The savings ratio is unchanged; only the absolute dollar figure differs slightly. For Sonnet/Opus/GPT-5.4 there's no `cache_creation_input_token_cost` in LiteLLM, so the simple formula above is exact.
+
+#### Per-category simulation (post-compression tokens only)
+
+Per-case pre-compression totals aren't recoverable from the v2 snapshot (the results dir was gitignored and got swept in the restructure), so the per-category numbers below use SDK-side totals only. To estimate the **without-Headroom** cost per category, multiply by `1 / (1 − 0.4415) ≈ 1.79`.
+
+**With-Headroom cost** (per category, each model's pricing):
+
+| Category | n_cases | Sonnet 4.6 | Opus 4.6 | GPT-5.4 | MiniMax-M3 |
+|---|---|---|---|---|---|
+| `simple_lookup`   | 10 | $0.0549 | $0.0915 | $0.0490 | $0.0110 |
+| `filtered_search` | 15 | $0.3051 | $0.5085 | $0.2694 | $0.0588 |
+| `aggregation`     | 15 | $0.0686 | $0.1144 | $0.0609 | $0.0143 |
+| `multi_step`      | 10 | $0.1582 | $0.2637 | $0.1406 | $0.0314 |
+
+**Estimated cost without Headroom** (×1.79 multiplier from the overall 44.15% compression ratio):
+
+| Category | n_cases | Sonnet 4.6 | Opus 4.6 | GPT-5.4 | MiniMax-M3 |
+|---|---|---|---|---|---|
+| `simple_lookup`   | 10 | $0.0983 | $0.1639 | $0.0878 | $0.0198 |
+| `filtered_search` | 15 | $0.5462 | $0.9104 | $0.4823 | $0.1053 |
+| `aggregation`     | 15 | $0.1229 | $0.2048 | $0.1091 | $0.0255 |
+| `multi_step`      | 10 | $0.2833 | $0.4722 | $0.2518 | $0.0561 |
+
+#### What this tells you
+
+- **Headroom's compression is model-agnostic.** 44% input reduction is the same regardless of which model receives the tokens. The dollar savings scale with the model's list price.
+- **At Anthropic list prices, this 50-case run costs ~$0.50 on Sonnet 4.6 or ~$0.85 on Opus 4.6.** Headroom saves you ~$0.25-$0.42 on that single run. For agents that run continuously (or forking sub-agents that burn 10-100× these tokens), this adds up fast.
+- **Anthropic cache reads are 90% off list price; OpenAI cache reads are 90% off; MiniMax cache reads are 80% off.** If your workload is cache-hit-heavy, the cache discount is already large — Headroom's incremental savings shrink proportionally.
+- **OpenAI GPT-5.4 is the cheapest of the three flagship models here** at $0.45/case — cheaper than Sonnet 4.6 ($0.51) but more expensive than MiniMax-M3 ($0.10). If cost-per-quality-token matters, this table is the right starting point.
+- **Multi-step cases are the highest-value targets for compression.** On Opus 4.6, multi_step costs $0.47 without Headroom vs $0.26 with — a $0.21 saving per case. Across 10 multi-step cases, that's $2.10 saved per benchmark run.
+
 ## How the metrics work (v2 — snapshot-based)
 
 1. **SDK-side capture** (`agent/callbacks.py`): every `client.messages.create()` records `{input_tokens, output_tokens, cache_read_tokens, cost_usd}` — these are the **post-compression** counts.

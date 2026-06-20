@@ -16,7 +16,7 @@ wheels/
 CLAUDE.md
 
 # LangGraph benchmark artifacts
-scratch/langgraph_bench/db/*.db
-scratch/langgraph_bench/results/
-scratch/tier1/logs/
+src/headroom_benchmarks/langgraph/db/*.db
+src/headroom_benchmarks/langgraph/results/
+src/headroom_benchmarks/benchmarks/tier1/logs/
 headroom_memory.db

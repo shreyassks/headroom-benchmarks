@@ -28,15 +28,15 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
-# Make the scratch package importable as `scratch.langgraph_bench.*`
-REPO_ROOT = Path(__file__).resolve().parents[3]
+# Make the scratch package importable as `headroom_benchmarks.langgraph.*`
+REPO_ROOT = Path(__file__).resolve().parents[4]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from scratch.langgraph_bench.agent.callbacks import UsageCapture
-from scratch.langgraph_bench.agent.graph import build_graph
-from scratch.langgraph_bench.agent.tools import mcp_session
-from scratch.langgraph_bench.runner.metrics import (
+from headroom_benchmarks.langgraph.agent.callbacks import UsageCapture
+from headroom_benchmarks.langgraph.agent.graph import build_graph
+from headroom_benchmarks.langgraph.agent.tools import mcp_session
+from headroom_benchmarks.langgraph.runner.metrics import (
     CaseAggregate,
     aggregate_case,
     aggregate_run,

@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 # --- .env loader (avoids needing python-dotenv at runtime) -----------------
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[4]
 ENV_FILE = REPO_ROOT / ".env"
 
 

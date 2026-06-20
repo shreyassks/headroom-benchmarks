@@ -8,12 +8,11 @@ import sys
 import time
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from bench_bfcl import main as run_bfcl  # type: ignore
-from bench_gsm8k import main as run_gsm8k  # type: ignore
-from bench_squad import main as run_squad  # type: ignore
-from bench_truthfulqa import main as run_truthfulqa  # type: ignore
+from headroom_benchmarks.benchmarks.tier1.bfcl import main as run_bfcl  # type: ignore
+from headroom_benchmarks.benchmarks.tier1.gsm8k import main as run_gsm8k  # type: ignore
+from headroom_benchmarks.benchmarks.tier1.squad import main as run_squad  # type: ignore
+from headroom_benchmarks.benchmarks.tier1.truthfulqa import main as run_truthfulqa  # type: ignore
 
 
 def main(n: int = 100):

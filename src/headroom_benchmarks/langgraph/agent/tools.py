@@ -23,14 +23,14 @@ from mcp.client.stdio import stdio_client
 
 
 # Repo root, computed from this file's path. Used as the MCP server's
-# working directory so it can resolve `scratch.langgraph_bench.mcp_server.server`.
+# working directory so it can resolve `headroom_benchmarks.langgraph.mcp_server.server`.
 # Layout: tools.py → agent/ → langgraph_bench/ → scratch/ → REPO_ROOT
-REPO_ROOT = Path(__file__).resolve().parents[3]
+REPO_ROOT = Path(__file__).resolve().parents[4]
 
 
 def server_command() -> list[str]:
     """How to launch the MCP server as a subprocess."""
-    return [sys.executable, "-m", "scratch.langgraph_bench.mcp_server.server"]
+    return [sys.executable, "-m", "headroom_benchmarks.langgraph.mcp_server.server"]
 
 
 @asynccontextmanager

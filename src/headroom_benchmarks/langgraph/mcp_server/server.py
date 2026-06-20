@@ -1,6 +1,6 @@
 """Customer-support tickets MCP server.
 
-Run as: `python -m scratch.langgraph_bench.mcp_server.server`
+Run as: `python -m headroom_benchmarks.langgraph.mcp_server.server`
 (or invoked by langchain-mcp-adapters via stdio)
 
 The server exposes five SQLite-backed tools. The output of each tool

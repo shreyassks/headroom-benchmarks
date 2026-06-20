@@ -15,7 +15,7 @@ The headline: **across 50 cases, X% fewer input tokens, $Y saved**, broken down 
 ## Layout
 
 ```
-scratch/langgraph_bench/
+src/headroom_benchmarks/langgraph/
 ├── README.md                       # this file
 ├── db/
 │   ├── schema.sql                  # tickets table + indexes
@@ -52,7 +52,7 @@ scratch/langgraph_bench/
 uv add langgraph 'langchain-core>=0.3' langchain-mcp-adapters 'mcp>=1.0' faker
 
 # Seed the tickets DB (~3 s, deterministic via seed=42)
-uv run python scratch/langgraph_bench/db/seed.py
+uv run python -m headroom_benchmarks.langgraph.db.seed
 ```
 
 ### 1. Stand up an ISOLATED proxy (Terminal 1)
@@ -82,7 +82,7 @@ curl -s http://127.0.0.1:8788/stats | jq '.summary'
 ```bash
 ANTHROPIC_BASE_URL=http://127.0.0.1:8788 \
   MINIMAX_API_KEY="$MINIMAX_API_KEY" \
-    uv run python scratch/langgraph_bench/runner/run.py
+    uv run headroom-bench
 ```
 
 Estimated runtime: **15-25 minutes** (50 cases × 5-30 s per case, async).
@@ -91,13 +91,13 @@ Estimated runtime: **15-25 minutes** (50 cases × 5-30 s per case, async).
 
 ```bash
 # Headline numbers
-cat scratch/langgraph_bench/results/bench_*/summary.json | jq
+cat src/headroom_benchmarks/langgraph/results/bench_*/summary.json | jq
 
 # Per-case breakdown
-cat scratch/langgraph_bench/results/bench_*/per_case.json | jq '.cases[0:5]'
+cat src/headroom_benchmarks/langgraph/results/bench_*/per_case.json | jq '.cases[0:5]'
 
 # Every LLM call (one JSON per line)
-cat scratch/langgraph_bench/results/bench_*/per_request.jsonl | jq -c '.'
+cat src/headroom_benchmarks/langgraph/results/bench_*/per_request.jsonl | jq -c '.'
 
 # Cross-check with proxy's own dashboard
 curl -s http://127.0.0.1:8788/stats | jq '.cost, .summary.cost'
@@ -266,8 +266,8 @@ If `cost_with_headroom_usd: 0.0` despite non-zero tokens, the LiteLLM prefix fix
 
 **MCP server fails to start** — check the DB is seeded:
 ```bash
-ls -la scratch/langgraph_bench/db/tickets.db
-uv run python scratch/langgraph_bench/db/seed.py
+ls -la src/headroom_benchmarks/langgraph/db/tickets.db
+uv run python -m headroom_benchmarks.langgraph.db.seed
 ```
 
 **Cases hang or timeout** — MiniMax-M3 can be slow on first call (cold start). The runner doesn't enforce a per-case timeout; kill the run and rerun (each case is independent).

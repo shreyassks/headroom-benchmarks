@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from common import (  # type: ignore
+from headroom_benchmarks.benchmarks.tier1.common import (  # type: ignore
     MODEL,
     RunLog,
     call_minimax,

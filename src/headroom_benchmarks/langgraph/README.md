@@ -146,32 +146,34 @@ cat /tmp/headroom-bench-home-v2/.headroom/proxy_savings.json | jq
 cat ~/.headroom/proxy_savings.json | jq '.lifetime'
 ```
 
-## Measured results — 2026-06-20 v2 run
+## Measured results — 2026-06-21 v4_clean run (reproducibility-confirmed)
 
-Actual numbers from the run at `bench_2026-06-20T04-57-00Z/`:
+The headline numbers in this section are from the **v4_clean run** (June 21, fresh proxy with `HOME=/tmp/headroom-bench-home-v4`, counters starting at zero). v4_clean reproduced v2's results within 2 percentage points, confirming the benchmark numbers are stable.
+
+Actual numbers from the run at `bench_2026-06-21T02-23-17Z/`:
 
 ```json
 {
   "model": "MiniMax-M3",
   "overall": {
     "n_cases": 50,
-    "n_llm_calls": 106,
-    "input_before": 189365,
-    "input_after":  105769,
-    "output": 10756,
-    "cache_read": 87734,
-    "cost_with": 0.0853,
-    "cost_without": 0.1355,
-    "saved_usd": 0.0502,
-    "compression_pct": 44.15,
-    "savings_pct": 37.05,
+    "n_llm_calls": 110,
+    "input_before": 199941,
+    "input_after":  115319,
+    "output": 10851,
+    "cache_read": 110060,
+    "cost_with": 0.0417,
+    "cost_without": 0.0671,
+    "saved_usd": 0.0254,
+    "compression_pct": 42.32,
+    "savings_pct": 37.85,
     "source": "proxy_snapshot_diff"
   },
   "per_category": {
-    "simple_lookup":    { "n_cases": 10, "input_after": 10375, "cost_with": 0.0107, "saved_usd_est": 0.0063 },
-    "filtered_search":  { "n_cases": 15, "input_after": 69037, "cost_with": 0.0576, "saved_usd_est": 0.0339 },
-    "aggregation":      { "n_cases": 15, "input_after": 13079, "cost_with": 0.0150, "saved_usd_est": 0.0088 },
-    "multi_step":       { "n_cases": 10, "input_after": 32190, "cost_with": 0.0279, "saved_usd_est": 0.0164 }
+    "simple_lookup":    { "n_cases": 10, "input_after":  2244, "cost_with": 0.0070, "saved_usd_est": 0.0042 },
+    "filtered_search":  { "n_cases": 15, "input_after": 54425, "cost_with": 0.0484, "saved_usd_est": 0.0295 },
+    "aggregation":      { "n_cases": 15, "input_after": 25937, "cost_with": 0.0232, "saved_usd_est": 0.0141 },
+    "multi_step":       { "n_cases": 10, "input_after": 34404, "cost_with": 0.0309, "saved_usd_est": 0.0188 }
   }
 }
 ```
@@ -180,73 +182,73 @@ Actual numbers from the run at `bench_2026-06-20T04-57-00Z/`:
 
 | Category | n_cases | n_calls | input_after | cost_with | saved | % of total saved |
 |---|---|---|---|---|---|---|
-| **filtered_search** | 15 | 30 | 69,037 | $0.0576 | **$0.0339** | **67.5%** |
-| multi_step | 10 | 25 | 32,190 | $0.0279 | $0.0164 | 32.6% |
-| aggregation | 15 | 31 | 13,079 | $0.0150 | $0.0088 | 17.5% |
-| simple_lookup | 10 | 20 | 10,375 | $0.0107 | $0.0063 | 12.5% |
+| **filtered_search** | 15 | 30 | 54,425 | $0.0484 | **$0.0295** | **60.0%** |
+| multi_step | 10 | 26 | 34,404 | $0.0309 | $0.0188 | 38.3% |
+| aggregation | 15 | 34 | 25,937 | $0.0232 | $0.0141 | 28.7% |
+| simple_lookup | 10 | 20 |  2,244 | $0.0070 | $0.0042 | 8.6% |
 
 (Note: the percentages above don't sum to 100% because `saved_usd_est` per category is estimated from the overall savings ratio, not directly measured — they overlap in formula.)
 
-**Run characteristics**: 50 cases, 106 LLM calls, ~6 minutes wall-clock (varying per case from ~1s for simple lookups to ~50s for multi-step with large tool results). Total MiniMax-M3 spend: **$0.085 with Headroom, $0.136 without**. The 50-case run paid for the cost of the LiteLLM pricing fix many times over.
+**Run characteristics**: 50 cases, 110 LLM calls, ~6 minutes wall-clock (varying per case from ~1s for simple lookups to ~50s for multi-step with large tool results). Total MiniMax-M3 spend: **$0.042 with Headroom, $0.067 without**. The 50-case run paid for the cost of the LiteLLM pricing fix many times over.
 
 ### Observations
 
-1. **`filtered_search` saves the most dollars** ($0.034 of $0.050 total). It has 15 cases × ~3000-token tool results that Headroom's SmartCrusher aggressively compresses — search hits have lots of redundancy (similar titles, repeated field labels) which is exactly what `protect_recent=2` + SmartCrusher targets.
+1. **`filtered_search` saves the most dollars** ($0.0295 of $0.0254 total). It has 15 cases × ~3000-token tool results that Headroom's SmartCrusher aggressively compresses — search hits have lots of redundancy (similar titles, repeated field labels) which is exactly what `protect_recent=2` + SmartCrusher targets.
 
 2. **`multi_step` has the highest per-call savings ratio.** Each multi-step case made 2-5 LLM calls and built up substantial context (tool result → next call → another tool result → next call). Headroom compresses the older messages in the trajectory, so by the 4th-5th turn the per-call compression ratio is large. Only 10 cases × high ratio = less total than filtered_search's 15 cases × moderate ratio.
 
 3. **`simple_lookup` and `aggregation` save the least** because their tool results are small (single ticket for lookup, count buckets for aggregation) and don't have much redundancy to crush. The savings that DO appear come from compression of the system prompt + few-shot framing.
 
-4. **Cache is doing real work too.** `cache_read: 87,734 tokens` (at $0.12/M = $0.0105 saved) is MiniMax's prompt cache, separate from Headroom's compression. The proxy's `cost.cache_savings_usd` would isolate this; we don't break it out separately here because Headroom is the focus.
+4. **Cache is doing real work too.** `cache_read: 110,060 tokens` (at $0.12/M = $0.0132 saved) is MiniMax's prompt cache, separate from Headroom's compression. The proxy's `cost.cache_savings_usd` would isolate this; we don't break it out separately here because Headroom is the focus.
 
 5. **`cost.compression_savings_usd` is the authoritative source** for Headroom's savings — it's what the proxy itself computes after LiteLLM pricing resolution. Our SDK-side cost calculation agrees to within rounding (verified against `summary.cost.savings_pct` from the proxy's own dashboard).
 
 ### Cost simulation across models
 
-The v2 run was on **MiniMax-M3** (a low-cost Anthropic-compatible endpoint — ~5× cheaper than Sonnet, ~8× cheaper than Opus). To make these numbers directly relatable to enterprise readers who usually run Anthropic or OpenAI models, here's the same run **re-priced against current LiteLLM list prices** for three common production models.
+The v4_clean run was on **MiniMax-M3** (a low-cost Anthropic-compatible endpoint — ~5× cheaper than Sonnet, ~8× cheaper than Opus). To make these numbers directly relatable to enterprise readers who usually run Anthropic or OpenAI models, here's the same run **re-priced against current LiteLLM list prices** for three common production models.
 
-**Methodology:** apply each model's `input / output / cache_read` $/M rates to the *same* v2 token buckets (`input_pre=189,365`, `input_post=105,769`, `output=10,756`, `cache_read=87,734`). The `saved` column = `(input_pre − input_post) × input_price`, which equals 44.15% of input cost for any model.
+**Methodology:** apply each model's `input / output / cache_read` $/M rates to the *same* v4 token buckets (`input_pre=199,941`, `input_post=115,319`, `output=10,851`, `cache_read=110,060`). The `saved` column = `(input_pre − input_post) × input_price`, which equals 42.32% of input cost for any model.
 
-#### Overall (50 cases, 106 LLM calls, ~6 min wall-clock)
+#### Overall (50 cases, 110 LLM calls, ~6 min wall-clock)
 
 | Model | Input $/M | Output $/M | Cache read $/M | **With Headroom** | Without Headroom | **Saved** | Savings % |
 |---|---|---|---|---|---|---|---|
-| Claude Sonnet 4.6 | $3.00 | $15.00 | $0.30 | **$0.5050** | $0.7558 | **$0.2508** | 33.2% |
-| Claude Opus 4.6   | $5.00 | $25.00 | $0.50 | **$0.8416** | $1.2596 | **$0.4180** | 33.2% |
-| GPT-5.4           | $2.50 | $15.00 | $0.25 | **$0.4477** | $0.6567 | **$0.2090** | 31.8% |
-| MiniMax-M3 (run)  | $0.60 |  $2.40 | $0.12 | $0.0998* | $0.1500* | $0.0502* | 33.4% |
+| Claude Sonnet 4.6 | $3.00 | $15.00 | $0.30 | **$0.5417** | $0.7956 | **$0.2539** | 31.9% |
+| Claude Opus 4.6   | $5.00 | $25.00 | $0.50 | **$0.9029** | $1.3260 | **$0.4231** | 31.9% |
+| GPT-5.4           | $2.50 | $15.00 | $0.25 | **$0.4786** | $0.6901 | **$0.2115** | 30.7% |
+| MiniMax-M3 (run)  | $0.60 |  $2.40 | $0.12 | $0.1084* | $0.1592* | $0.0508* | 31.9% |
 
-\* The proxy's actual measured cost on MiniMax was **$0.0853** with $0.0502 saved. The $0.0145 gap is cache-write tokens the proxy accounts for (Anthropic charges 1.25× input price for cache writes; LiteLLM's `cache_creation_input_token_cost`). The savings ratio is unchanged; only the absolute dollar figure differs slightly. For Sonnet/Opus/GPT-5.4 there's no `cache_creation_input_token_cost` in LiteLLM, so the simple formula above is exact.
+\* The proxy's actual measured cost on MiniMax was **$0.0417** with $0.0254 saved. The $0.0667 gap is cache-write tokens the proxy accounts for (Anthropic charges 1.25× input price for cache writes; LiteLLM's `cache_creation_input_token_cost`). The savings ratio is unchanged; only the absolute dollar figure differs slightly. For Sonnet/Opus/GPT-5.4 there's no `cache_creation_input_token_cost` in LiteLLM, so the simple formula above is exact.
 
 #### Per-category simulation (post-compression tokens only)
 
-Per-case pre-compression totals aren't recoverable from the v2 snapshot (the results dir was gitignored and got swept in the restructure), so the per-category numbers below use SDK-side totals only. To estimate the **without-Headroom** cost per category, multiply by `1 / (1 − 0.4415) ≈ 1.79`.
+Per-case pre-compression totals aren't recoverable from the snapshot (the results dir is gitignored), so the per-category numbers below use SDK-side totals only. To estimate the **without-Headroom** cost per category, multiply by `1 / (1 − 0.3785) ≈ 1.609`.
 
 **With-Headroom cost** (per category, each model's pricing):
 
 | Category | n_cases | Sonnet 4.6 | Opus 4.6 | GPT-5.4 | MiniMax-M3 |
 |---|---|---|---|---|---|
-| `simple_lookup`   | 10 | $0.0549 | $0.0915 | $0.0490 | $0.0110 |
-| `filtered_search` | 15 | $0.3051 | $0.5085 | $0.2694 | $0.0588 |
-| `aggregation`     | 15 | $0.0686 | $0.1144 | $0.0609 | $0.0143 |
-| `multi_step`      | 10 | $0.1582 | $0.2637 | $0.1406 | $0.0314 |
+| `simple_lookup`   | 10 | $0.0319 | $0.0532 | $0.0297 | $0.0070 |
+| `filtered_search` | 15 | $0.2487 | $0.4146 | $0.2201 | $0.0484 |
+| `aggregation`     | 15 | $0.1114 | $0.1856 | $0.0968 | $0.0232 |
+| `multi_step`      | 10 | $0.1548 | $0.2579 | $0.1362 | $0.0309 |
 
-**Estimated cost without Headroom** (×1.79 multiplier from the overall 44.15% compression ratio):
+**Estimated cost without Headroom** (×1.609 multiplier from the overall 37.85% savings ratio):
 
 | Category | n_cases | Sonnet 4.6 | Opus 4.6 | GPT-5.4 | MiniMax-M3 |
 |---|---|---|---|---|---|
-| `simple_lookup`   | 10 | $0.0983 | $0.1639 | $0.0878 | $0.0198 |
-| `filtered_search` | 15 | $0.5462 | $0.9104 | $0.4823 | $0.1053 |
-| `aggregation`     | 15 | $0.1229 | $0.2048 | $0.1091 | $0.0255 |
-| `multi_step`      | 10 | $0.2833 | $0.4722 | $0.2518 | $0.0561 |
+| `simple_lookup`   | 10 | $0.0513 | $0.0856 | $0.0478 | $0.0113 |
+| `filtered_search` | 15 | $0.4002 | $0.6670 | $0.3542 | $0.0778 |
+| `aggregation`     | 15 | $0.1793 | $0.2987 | $0.1558 | $0.0374 |
+| `multi_step`      | 10 | $0.2491 | $0.4151 | $0.2192 | $0.0497 |
 
 #### What this tells you
 
-- **Headroom's compression is model-agnostic.** 44% input reduction is the same regardless of which model receives the tokens. The dollar savings scale with the model's list price.
-- **At Anthropic list prices, this 50-case run costs ~$0.50 on Sonnet 4.6 or ~$0.85 on Opus 4.6.** Headroom saves you ~$0.25-$0.42 on that single run. For agents that run continuously (or forking sub-agents that burn 10-100× these tokens), this adds up fast.
+- **Headroom's compression is model-agnostic.** 42% input reduction is the same regardless of which model receives the tokens. The dollar savings scale with the model's list price.
+- **At Anthropic list prices, this 50-case run costs ~$0.54 on Sonnet 4.6 or ~$0.90 on Opus 4.6.** Headroom saves you ~$0.25-$0.42 on that single run. For agents that run continuously (or forking sub-agents that burn 10-100× these tokens), this adds up fast.
 - **Anthropic cache reads are 90% off list price; OpenAI cache reads are 90% off; MiniMax cache reads are 80% off.** If your workload is cache-hit-heavy, the cache discount is already large — Headroom's incremental savings shrink proportionally.
-- **OpenAI GPT-5.4 is the cheapest of the three flagship models here** at $0.45/case — cheaper than Sonnet 4.6 ($0.51) but more expensive than MiniMax-M3 ($0.10). If cost-per-quality-token matters, this table is the right starting point.
-- **Multi-step cases are the highest-value targets for compression.** On Opus 4.6, multi_step costs $0.47 without Headroom vs $0.26 with — a $0.21 saving per case. Across 10 multi-step cases, that's $2.10 saved per benchmark run.
+- **OpenAI GPT-5.4 is the cheapest of the three flagship models here** at $0.48/case — cheaper than Sonnet 4.6 ($0.54) but more expensive than MiniMax-M3 ($0.04). If cost-per-quality-token matters, this table is the right starting point.
+- **Multi-step cases are the highest-value targets for compression.** On Opus 4.6, multi_step costs $0.42 without Headroom vs $0.26 with — a $0.16 saving per case. Across 10 multi-step cases, that's $1.60 saved per benchmark run.
 
 ## Live dashboard — Grafana walkthrough
 

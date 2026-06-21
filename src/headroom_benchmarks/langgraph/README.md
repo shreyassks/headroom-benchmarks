@@ -61,7 +61,7 @@ The live `:8787` proxy has data from other sessions. To isolate this benchmark, 
 
 ```bash
 mkdir -p /tmp/headroom-bench-home-v2    # use a fresh dir per run for clean counters
-
+set -a; source .env; set +a
 HOME=/tmp/headroom-bench-home-v2 \
   ANTHROPIC_API_KEY="$MINIMAX_API_KEY" \
   ANTHROPIC_TARGET_API_URL="https://api.minimax.io/anthropic" \
@@ -79,11 +79,32 @@ curl -s http://127.0.0.1:8788/stats | jq '.summary'
 
 ### 2. Run the benchmark (Terminal 2)
 
+Before launching, two pre-flight checks — both are common foot-guns and the symptom of either one is the run silently doing the wrong thing.
+
 ```bash
+# 1. Confirm the SQLite fixture exists. If you cloned fresh or the
+#    previous run failed with "the database is not available", re-seed.
+test -f src/headroom_benchmarks/langgraph/db/tickets.db || \
+  uv run python -m headroom_benchmarks.langgraph.db.seed
+
+# 2. Confirm .env at the repo root has MINIMAX_API_KEY.
+test -f .env && grep -q MINIMAX_API_KEY .env || \
+  { echo "ERROR: .env with MINIMAX_API_KEY missing"; exit 1; }
+
+# 3. Load .env into the current shell. `set -a` (allexport) auto-exports
+#    every KEY=VALUE that `source .env` reads, so $MINIMAX_API_KEY is
+#    available to `headroom_benchmarks.agent.client.client()` when it
+#    constructs the Anthropic client.
+set -a; source .env; set +a
+
+# 4. Run the benchmark
 ANTHROPIC_BASE_URL=http://127.0.0.1:8788 \
-  MINIMAX_API_KEY="$MINIMAX_API_KEY" \
     uv run headroom-bench
 ```
+
+> **What changed in v2:** the previous `MINIMAX_API_KEY="$MINIMAX_API_KEY"` inline form silently expanded to empty if the parent shell didn't already have the variable exported — the runner would die with `RuntimeError: MINIMAX_API_KEY is not set`. The `set -a; source .env; set +a` idiom loads every key from `.env` before the command runs.
+
+> **If you see "I'm unable to retrieve ticket #N — the database is not available"** in the run output, the SQLite fixture is missing or got swept (e.g. you pulled after a major restructure). Re-run `uv run python -m headroom_benchmarks.langgraph.db.seed` and retry.
 
 Estimated runtime: **15-25 minutes** (50 cases × 5-30 s per case, async).
 

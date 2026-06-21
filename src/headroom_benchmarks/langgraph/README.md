@@ -68,9 +68,9 @@ uv run python -m headroom_benchmarks.langgraph.db.seed
 The live `:8787` proxy (if you have one running) has data from other sessions. To isolate this benchmark, run a **second** proxy on `:8788` with `HOME` redirected so its persistent counters live in a directory no other session uses:
 
 ```bash
-# Pick a fresh per-run dir under /tmp (e.g. -v3, -v4, ...). Older
+# Pick a fresh per-run dir under /tmp (e.g. -v4, -v5, ...). Older
 # versions stay around for inspection; current run starts at zero counters.
-PROXY_HOME=/tmp/headroom-bench-home-v3
+PROXY_HOME=/tmp/headroom-bench-home-v4
 mkdir -p "$PROXY_HOME"
 
 # Load .env (sets ANTHROPIC_API_KEY etc.) and start the proxy.

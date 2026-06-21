@@ -140,7 +140,7 @@ curl -s http://127.0.0.1:8788/stats | jq '.cost, .summary.cost'
 
 ```bash
 # This benchmark's persistent counters:
-cat /tmp/headroom-bench-home-v2/.headroom/proxy_savings.json | jq
+cat /tmp/headroom-bench-home-v4/.headroom/proxy_savings.json | jq
 
 # The live :8787 proxy's counters should be UNTOUCHED:
 cat ~/.headroom/proxy_savings.json | jq '.lifetime'
@@ -405,7 +405,7 @@ Math check: **199.9k = 84.6k + 115.3k** ✓
 ```mermaid
 flowchart TB
     subgraph T1["Terminal 1 — proxy on :8788"]
-        PROXY["uv run headroom proxy<br/>HOME=/tmp/headroom-bench-home-v2<br/>ANTHROPIC_API_KEY=$MINIMAX_API_KEY<br/>ANTHROPIC_TARGET_API_URL=https://api.minimax.io/anthropic"]
+        PROXY["uv run headroom proxy<br/>HOME=/tmp/headroom-bench-home-v4<br/>ANTHROPIC_API_KEY=$MINIMAX_API_KEY<br/>ANTHROPIC_TARGET_API_URL=https://api.minimax.io/anthropic"]
         STATS[/"per-run /stats snapshots<br/>results/proxy_before.json<br/>results/proxy_after.json"/]
         PROXY -.->|GET /stats| STATS
     end

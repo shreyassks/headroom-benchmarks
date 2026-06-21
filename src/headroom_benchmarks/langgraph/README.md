@@ -45,28 +45,42 @@ src/headroom_benchmarks/langgraph/
 
 ## How to run
 
-### 0. One-time setup
+### 0. One-time setup (per fresh checkout)
 
 ```bash
-# Dependencies are already in pyproject.toml; if starting fresh:
-uv add langgraph 'langchain-core>=0.3' langchain-mcp-adapters 'mcp>=1.0' faker
+# Install dependencies — pyproject.toml + uv.lock already pin versions
+uv sync
 
-# Seed the tickets DB (~3 s, deterministic via seed=42)
+# Create .env at the repo root with your MiniMax API key
+cat > .env <<'EOF'
+MINIMAX_API_KEY=sk-cp-your-key-here
+EOF
+chmod 600 .env   # keep the key private if you'll commit the rest of the repo
+
+# Seed the SQLite fixture (~3 s, deterministic via seed=42)
 uv run python -m headroom_benchmarks.langgraph.db.seed
 ```
 
+> **Re-seed if you see "the database is not available"** in run output — this happens after a major restructure or if `tickets.db` got swept.
+
 ### 1. Stand up an ISOLATED proxy (Terminal 1)
 
-The live `:8787` proxy has data from other sessions. To isolate this benchmark, run a **second** proxy on `:8788` with `HOME` redirected so its persistent counters live in a directory that no other session uses:
+The live `:8787` proxy (if you have one running) has data from other sessions. To isolate this benchmark, run a **second** proxy on `:8788` with `HOME` redirected so its persistent counters live in a directory no other session uses:
 
 ```bash
-mkdir -p /tmp/headroom-bench-home-v2    # use a fresh dir per run for clean counters
+# Pick a fresh per-run dir under /tmp (e.g. -v3, -v4, ...). Older
+# versions stay around for inspection; current run starts at zero counters.
+PROXY_HOME=/tmp/headroom-bench-home-v3
+mkdir -p "$PROXY_HOME"
+
+# Load .env (sets ANTHROPIC_API_KEY etc.) and start the proxy.
 set -a; source .env; set +a
-HOME=/tmp/headroom-bench-home-v2 \
-  ANTHROPIC_API_KEY="$MINIMAX_API_KEY" \
-  ANTHROPIC_TARGET_API_URL="https://api.minimax.io/anthropic" \
+HOME="$PROXY_HOME" \
+  ANTHROPIC_TARGET_API_URL=https://api.minimax.io/anthropic \
     uv run headroom proxy --port 8788 --no-cache --no-rate-limit
 ```
+
+> **Why these env vars:** `HOME=` redirects `~/.headroom/proxy_savings.json` and `~/.headroom/session_stats.jsonl` into `$PROXY_HOME/.headroom/` — that's how the run's counters stay isolated from any other proxy on `:8787`. `ANTHROPIC_TARGET_API_URL` tells the proxy where to forward upstream calls. (`ANTHROPIC_API_KEY` is loaded from `.env` via the `source` line above — no need to repeat it inline.)
 
 Verify it's up:
 
@@ -74,8 +88,6 @@ Verify it's up:
 curl -s http://127.0.0.1:8788/livez
 curl -s http://127.0.0.1:8788/stats | jq '.summary'
 ```
-
-> **Why redirect `HOME`?** Headroom stores persistent counters at `~/.headroom/proxy_savings.json` and `~/.headroom/session_stats.jsonl`. Setting `HOME=` redirects both to your isolated dir without any code changes — the proxy just transparently uses the new path.
 
 ### 2. Run the benchmark (Terminal 2)
 

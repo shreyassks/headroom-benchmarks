@@ -252,6 +252,26 @@ Per-case pre-compression totals aren't recoverable from the v2 snapshot (the res
 
 Screenshots from the v4_clean run (June 21, fresh-proxy reproducibility check, 110 LLM calls, **42.32% compression**). Three views of the same Headroom Grafana dashboard.
 
+### Glossary — read this first
+
+The Headroom dashboard uses a few terms that mean slightly different things in different places. Here's the cheat sheet:
+
+| Term | What it actually means |
+|---|---|
+| **Token compression** | Headroom's SmartCrusher removes redundant tokens from the message body **before** sending to the model. Operates at the proxy, locally. |
+| **Prefix cache** | The LLM provider's feature where the first N tokens of a new request can be served from a recent cache if the prefix matches. Operates at the provider, remotely. Cached reads are 80-90% off list price. |
+| **CacheAligner** | Headroom's feature that keeps message prefixes stable (always system → tools → user, in that order) so the provider can cache and reuse them. |
+| **Cache hit (full)** | The new request's prefix **exactly** matches a recent request's prefix. The provider can reuse the entire prefix. |
+| **Cache hit (partial)** | The new request's prefix **starts** with a recent request's prefix but diverges partway through. The provider can reuse the matching portion but the tail has to be recomputed. |
+| **Cache bust (full)** | The new request's prefix is so different from any recent request that **nothing** is reusable — the entire cache entry is invalidated and a brand-new one has to be written. |
+| **Cache bust (partial)** | Used loosely in the dashboard: a partial hit where the **unreusable tail** is "lost" to the cache (still has to be processed by the model). This is the "lost to cache busts" number. |
+| **Cache hit rate** | % of requests that got *any* cache reuse (full or partial). 49% in our run means every request got *some* prefix reuse, but no request was a 100% full match. |
+| **PREFIX FREEZE NET** | Bonus savings from Headroom's prefix-freeze feature (injects a "don't shift this prefix" marker to prevent partial busts). `+0` means it was idle — the prefix was naturally stable enough that no freezing was needed. |
+
+> **The two "busts" numbers you see are NOT the same thing:**
+> - **CACHE BUSTS: 0** in the Prefix Cache Impact block = full cache invalidations (catastrophic). Never happened.
+> - **LOST TO CACHE BUSTS: 3.6k (4 busts observed)** in the Compression vs Cache block = the average unreusable tail across 4 partial-drift events. Different metric.
+
 ### 1. Overview — top-line KPIs and token flow
 
 ![Headroom overview](docs/screenshots/01-overview.png)
@@ -281,9 +301,6 @@ Screenshots from the v4_clean run (June 21, fresh-proxy reproducibility check, 1
 
 **Token flow bar** — visual representation of the same 4 numbers across a horizontal bar: **199.9k before (full bar) → 115.3k after (cyan) → 84.6k saved (green)** with 100.0% share (one client, the LangGraph runner).
 
-**Savings Breakdown** — the only "source" of savings in this run is **Compression: $0.025 / 84.6k proxy tokens removed**. The other rows (Cache, RTK, CLI filtering) are visible but show $0 because:
-- Cache reads are 80% off list price on MiniMax, so they don't add dollar savings on top of compression
-- RTK and CLI filtering saved 0 tokens in this run
 
 ### 2. Cache & compression — what's happening under the hood
 
@@ -296,7 +313,7 @@ Screenshots from the v4_clean run (June 21, fresh-proxy reproducibility check, 1
 | **CACHE READS** | 110.1k, $0.00 saved | Total tokens served from MiniMax's prompt cache. 80% off list price = $0.00 marginal cost. |
 | **CACHE WRITES** | 0 | No new cache writes — the proxy's CacheAligner stabilized prefixes so the existing cache entries were reused. |
 | **HIT RATE** | 49% (110/110 requests) | Half of all LLM calls got *some* cache hit. Since every call hit cache, the "hit rate" being below 100% means some calls had partial cache hits (only the prefix matched, not the full request). |
-| **CACHE BUSTS** | 0 | No requests had to drop the entire cache because of a prefix change. The LangGraph agent's stable message structure (system + tools + last N turns) keeps the prefix stable. |
+| **CACHE BUSTS** | 0 | No requests had to drop the **entire** cache (see Glossary: "Cache bust (full)"). The LangGraph agent's stable message structure (system → tools → last N turns) keeps the prefix naturally aligned. Note: this 0 is *not* the same as the "4 busts observed" in the COMPRESSION vs CACHE block below — those are partial busts (drift on the tail), a different count entirely. |
 | **PROVIDERS** | 1 with cache data | Only Anthropic-format providers (MiniMax uses the Anthropic protocol) |
 
 **COMPRESSION vs CACHE** — the four-quadrant net savings view:
@@ -304,9 +321,9 @@ Screenshots from the v4_clean run (June 21, fresh-proxy reproducibility check, 1
 | Field | Value | Reading |
 |---|---|---|
 | **SAVED BY COMPRESSION** | 84.6k | Tokens removed from the request body before sending to the model |
-| **LOST TO CACHE BUSTS** | 3.6k | 4 busts observed — when the prefix changes, the existing cache entry is invalidated and a new one must be written, costing the 5-min TTL window. The 3.6k is the average bust size. |
-| **NET** | +81.0k | 84.6k − 3.6k = the net tokens saved by compression minus cache-bust losses |
-| **PREFIX FREEZE NET** | +0 | 0 busts, 0 foregone. Headroom's prefix-freeze logic isn't active here (no busts to freeze against). |
+| **LOST TO CACHE BUSTS** | 3.6k (4 events) | 4 partial-drift events (see Glossary: "Cache bust (partial)"). In each, the request's prefix started with a recent prefix but diverged partway through (e.g. a new tool result was added), so the **tail** of the prefix had to be re-processed by the model. The 3.6k is the **average size of that unreusable tail** across the 4 events. This is *not* the same as the "CACHE BUSTS: 0" metric in the block above — that one counts full invalidations; this one counts partial. |
+| **NET** | +81.0k | 84.6k − 3.6k = the net tokens saved by compression minus cache-bust losses. This is the "did Headroom actually help, net of cache effects?" number. |
+| **PREFIX FREEZE NET** | +0 (0 busts, 0 foregone) | 0 busts were prevented by Headroom's prefix-freeze feature, and 0 cache hits were given up to enable the freeze. In this run the proxy didn't need to freeze anything because the LangGraph agent's prefix was naturally stable. |
 
 **Per-provider breakdown:**
 - **anthropic**: Explicit breakpoints, 6-min TTL. This is MiniMax's caching policy surfaced through the proxy. **110.1k reads (90% off)** — the proxy sees 90% cache discount applied to read tokens. **0 writes (+25%)** — no cache writes. **0 busts, $0.00** net — cache wins at zero dollar cost.

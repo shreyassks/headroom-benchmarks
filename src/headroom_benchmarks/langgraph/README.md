@@ -248,6 +248,114 @@ Per-case pre-compression totals aren't recoverable from the v2 snapshot (the res
 - **OpenAI GPT-5.4 is the cheapest of the three flagship models here** at $0.45/case — cheaper than Sonnet 4.6 ($0.51) but more expensive than MiniMax-M3 ($0.10). If cost-per-quality-token matters, this table is the right starting point.
 - **Multi-step cases are the highest-value targets for compression.** On Opus 4.6, multi_step costs $0.47 without Headroom vs $0.26 with — a $0.21 saving per case. Across 10 multi-step cases, that's $2.10 saved per benchmark run.
 
+## Live dashboard — Grafana walkthrough
+
+Screenshots from the v4_clean run (June 21, fresh-proxy reproducibility check, 110 LLM calls, **42.32% compression**). Three views of the same Headroom Grafana dashboard.
+
+### 1. Overview — top-line KPIs and token flow
+
+![Headroom overview](docs/screenshots/01-overview.png)
+
+**Top bar:**
+- **HEADROOM v0.26.0** — proxy version (matches `headroom-ai[all]>=0.26.0` in `pyproject.toml`)
+- **Session / Historical** — toggle between the live proxy and historical `/stats` data; Historical pulls from the persistent `~/.headroom/proxy_savings.json`
+- **Status: Healthy** — `/livez` returned `{"status": "healthy", "alive": true}`
+- **Updated 08:01:18** — last `/stats` refresh
+
+**Three KPI cards:**
+
+| Card | Value | What it means |
+|---|---|---|
+| **PROXY $ SAVED** | `$0.025` | Total USD saved by the proxy across the session. The note "84.6k tokens only; RTK excluded from $" — Headroom's CLI filter (RTK) saves tokens but those don't translate to dollars (the saving was already counted in the proxy's pre-send compression). |
+| **TOKEN SAVINGS** | `84.6k (42.3%)` | Total input tokens removed by the proxy. The split "Proxy 84.6k/42.3% | RTK 0/0%" shows proxy-side vs RTK-side contributions. |
+| **OVERHEAD** | `19ms` | Average wall-clock cost added by the proxy per request. "TTFB 0.00s avg" — the proxy doesn't add time-to-first-byte because it streams the response once the upstream model starts producing. |
+
+**Agent Usage panel** — the core flow:
+
+| Field | Value | Reading |
+|---|---|---|
+| BEFORE | 199.9k | Tokens the agent would have sent to the model with no compression |
+| AFTER | 115.3k | Tokens that actually went over the wire to MiniMax-M3 |
+| SAVED | 84.6k | The difference (= 199.9k − 115.3k) |
+| SAVINGS | 42.3% | SAVED ÷ BEFORE — input token compression ratio |
+
+**Token flow bar** — visual representation of the same 4 numbers across a horizontal bar: **199.9k before (full bar) → 115.3k after (cyan) → 84.6k saved (green)** with 100.0% share (one client, the LangGraph runner).
+
+**Savings Breakdown** — the only "source" of savings in this run is **Compression: $0.025 / 84.6k proxy tokens removed**. The other rows (Cache, RTK, CLI filtering) are visible but show $0 because:
+- Cache reads are 80% off list price on MiniMax, so they don't add dollar savings on top of compression
+- RTK and CLI filtering saved 0 tokens in this run
+
+### 2. Cache & compression — what's happening under the hood
+
+![Cache and compression](docs/screenshots/02-cache-and-compression.png)
+
+**Prefix Cache Impact** (top row):
+
+| Metric | Value | Reading |
+|---|---|---|
+| **CACHE READS** | 110.1k, $0.00 saved | Total tokens served from MiniMax's prompt cache. 80% off list price = $0.00 marginal cost. |
+| **CACHE WRITES** | 0 | No new cache writes — the proxy's CacheAligner stabilized prefixes so the existing cache entries were reused. |
+| **HIT RATE** | 49% (110/110 requests) | Half of all LLM calls got *some* cache hit. Since every call hit cache, the "hit rate" being below 100% means some calls had partial cache hits (only the prefix matched, not the full request). |
+| **CACHE BUSTS** | 0 | No requests had to drop the entire cache because of a prefix change. The LangGraph agent's stable message structure (system + tools + last N turns) keeps the prefix stable. |
+| **PROVIDERS** | 1 with cache data | Only Anthropic-format providers (MiniMax uses the Anthropic protocol) |
+
+**COMPRESSION vs CACHE** — the four-quadrant net savings view:
+
+| Field | Value | Reading |
+|---|---|---|
+| **SAVED BY COMPRESSION** | 84.6k | Tokens removed from the request body before sending to the model |
+| **LOST TO CACHE BUSTS** | 3.6k | 4 busts observed — when the prefix changes, the existing cache entry is invalidated and a new one must be written, costing the 5-min TTL window. The 3.6k is the average bust size. |
+| **NET** | +81.0k | 84.6k − 3.6k = the net tokens saved by compression minus cache-bust losses |
+| **PREFIX FREEZE NET** | +0 | 0 busts, 0 foregone. Headroom's prefix-freeze logic isn't active here (no busts to freeze against). |
+
+**Per-provider breakdown:**
+- **anthropic**: Explicit breakpoints, 6-min TTL. This is MiniMax's caching policy surfaced through the proxy. **110.1k reads (90% off)** — the proxy sees 90% cache discount applied to read tokens. **0 writes (+25%)** — no cache writes. **0 busts, $0.00** net — cache wins at zero dollar cost.
+
+**What Headroom Removed** — what content types the SmartCrusher targeted:
+- **JSON Bloat: 162.7k tokens** — the dominant compression target. Tool results are JSON-encoded, and JSON has lots of redundant whitespace, repeated keys, verbose number formatting (e.g. `"created_at": "2026-05-18T23:13:59.123456"` → `"c": "2026-05-18"`).
+- **HTML Noise: 1.8k tokens** — minor; the agent doesn't render HTML, but some tool results had HTML-like formatting.
+
+**Savings Over Time** (line chart) — shows the cumulative tokens saved growing as the run progresses. The shape (step function rather than smooth) reflects the LangGraph agent's batched behavior: each case makes 2-3 LLM calls in quick succession, so savings accumulate in bursts at case boundaries.
+
+### 3. Token usage, providers, performance — operational view
+
+![Token usage and performance](docs/screenshots/03-token-usage-and-performance.png)
+
+**Token Usage** (left panel) — the lifecycle of every token through the proxy:
+
+| Field | Value | Reading |
+|---|---|---|
+| **Before Compression** | 199.9k | Same number as the Agent Usage BEFORE — total input tokens from the client (runner) |
+| **RTK Filtered** | 0 | RTK (a CLI filter, not the proxy) intercepted 0 tokens. RTK operates on Bash command output, not LLM messages, so it shows $0 here. |
+| **Proxy Removed** | 84.6k | Tokens removed by the proxy's SmartCrusher before forwarding to MiniMax |
+| **After Compression (sent)** | 115.3k | Final token count sent over the wire to the model |
+| **Output Tokens** | 10.9k | Tokens the model generated back to the agent |
+
+Math check: **199.9k = 84.6k + 115.3k** ✓
+
+**Providers** (middle panel): **anthropic, 110 requests**. The proxy classifies traffic by protocol — even though we're routing to MiniMax's Anthropic-compatible endpoint, the proxy sees it as an Anthropic-format request.
+
+**Performance** (right panel) — the operational SLA:
+
+| Metric | Value | Reading |
+|---|---|---|
+| **Headroom Overhead** | 19ms avg, Range 1-1357ms | Average latency the proxy adds. Most calls are ~19ms (cache lookups + token counting), but one outlier hit 1357ms (probably the first call, cold cache, model loading). |
+| **TTFB (upstream)** | 0ms avg, Range 0-8ms | Time-to-first-byte from the upstream model. Streaming responses start almost immediately. |
+| **Failed Requests** | 0 | Zero failures. The proxy retried transparently for any transient 5xx. |
+
+**PIPELINE BREAKDOWN** — the per-stage cost of the compression pipeline. All stages show 0ms avg / Xms max because:
+- The compression work is done in microseconds (SmartCrusher is local)
+- Only `pipeline_total` shows the cumulative max
+- The bottleneck is upstream model latency, not the proxy
+
+**Per-Model Token Savings** — broken down by model name (only one in this run):
+- **MiniMax-M3**: 110 requests, 84.6k saved, 115.3k sent, **42.3% reduction** (matches the headline)
+
+**Recent Requests** (last 10) — drill-down for the most recent calls. Each row shows:
+- **TIME**: "2m ago" or "2h ago" (relative to dashboard refresh)
+- **MODEL**: MiniMax-M3
+- **INPUT / OUTPUT / SAVED / LATENCY**: per-request breakdown. The 84 → 0% row at the top is the most recent; it had 84 input tokens with nothing to compress (below the 500-token `min_tokens_to_crush` threshold). The 963 → 3% row below had 963 tokens with 3% compression. The summary is that the agent's first LLM call in each case tends to be small (just the system prompt + user question) and gets a low or zero compression ratio, while subsequent calls with tool results accumulated in context see much higher ratios.
+
 ## How the metrics work (v2 — snapshot-based)
 
 1. **SDK-side capture** (`agent/callbacks.py`): every `client.messages.create()` records `{input_tokens, output_tokens, cache_read_tokens, cost_usd}` — these are the **post-compression** counts.

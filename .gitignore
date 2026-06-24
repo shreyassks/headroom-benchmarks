@@ -20,3 +20,4 @@ src/headroom_benchmarks/langgraph/db/*.db
 src/headroom_benchmarks/langgraph/results/
 src/headroom_benchmarks/benchmarks/tier1/logs/
 headroom_memory.db
+.headroom/

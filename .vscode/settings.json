@@ -1,0 +1,8 @@
+{
+    "[jupyter-notebook]": {
+        "files.autoSave": "off"
+    },
+    "files.autoSave": "afterDelay",
+    "files.autoSaveDelay": 5000,
+    "jupyter.runStartupCommands": []
+}

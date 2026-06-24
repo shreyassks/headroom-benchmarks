@@ -21,10 +21,12 @@ keywords = [
 
 dependencies = [
     "faker>=40.23.0",
-    "headroom-ai[all]>=0.26.0",
+    "headroom-ai[all]>=0.27.0",
+    "langchain-anthropic>=1.4.7",
     "langchain-core>=0.3",
     "langchain-mcp-adapters>=0.3.0",
     "langgraph>=1.2.6",
+    "litellm>=1.89.2",
     "mcp>=1.0",
 ]
 
@@ -48,3 +50,12 @@ package = true
 # Placeholder for future test additions.
 testpaths = ["tests"]
 pythonpath = ["src"]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.3.0",
+    "jupyter>=1.1.1",
+    "nbclient>=0.11.0",
+    "pytest>=9.1.1",
+    "ruff>=0.15.19",
+]
